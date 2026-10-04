@@ -1,0 +1,31 @@
+{
+  "name": "jev-office",
+  "version": "0.1.0",
+  "description": "本地优先的多 Agent 调度工作站：System One 决策模型当 judge，按任务类型路由到不同模型分区，全程审计概率/把握度/成本。",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "bin": {
+    "jev": "src/cli.ts"
+  },
+  "scripts": {
+    "jev": "node src/cli.ts",
+    "demo": "bash examples/demo.sh",
+    "typecheck": "tsc --noEmit",
+    "test": "node --no-warnings=ExperimentalWarning --test \"test/*.test.ts\""
+  },
+  "keywords": [
+    "jev",
+    "system-one",
+    "openjev",
+    "multi-agent",
+    "router",
+    "local-first"
+  ],
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "typescript": "^7.0.2"
+  }
+}

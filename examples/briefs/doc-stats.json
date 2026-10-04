@@ -1,0 +1,14 @@
+{
+  "title": "统计 Markdown 参考资料",
+  "description": "清点 examples/refs 目录：统计其中 Markdown（.md）文件的总数、总行数、总字节数，并给出三个数字。",
+  "scope": [
+    "只统计 examples/refs 下后缀为 .md 的文件",
+    "输出文件总数 / 总行数 / 总字节数三项"
+  ],
+  "acceptance": [
+    "结果文件给出三个数字：md 文件数、总行数、总字节数",
+    "执行证据小节列出实际运行过的统计命令（如 find / wc）"
+  ],
+  "constraints": ["只读：不得修改任何文件"],
+  "workdir": "../.."
+}

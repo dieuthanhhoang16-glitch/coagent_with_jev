@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.jev-office/
+examples/frontend-page/out/
+*.log
+.DS_Store
+# 本地真实配置（不进仓库；仓库只进 *.example.json）
+jev-office.config.json
+config/partitions.json

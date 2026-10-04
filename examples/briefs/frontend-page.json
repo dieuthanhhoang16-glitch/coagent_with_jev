@@ -1,0 +1,16 @@
+{
+  "title": "JEV 办公室落地页",
+  "description": "为本项目生成一个产品落地页：单文件 index.html（内联样式，无外部依赖），深色风格，介绍 JEV 办公室的四大卖点：概率路由、把握线四态、执行证据、成本节省。",
+  "scope": [
+    "在 examples/frontend-page/out/ 下生成 index.html",
+    "页面中文文案，包含产品名“JEV 办公室”",
+    "四大卖点各一个小卡片：概率路由 / 把握线四态 / 执行证据 / 成本节省"
+  ],
+  "acceptance": [
+    "examples/frontend-page/out/index.html 存在且可被浏览器直接打开",
+    "页面包含四个卖点板块的标题文字",
+    "执行证据小节列出写过的文件路径"
+  ],
+  "constraints": ["只允许写入 examples/frontend-page/out/ 目录", "不引入外部 CDN 依赖"],
+  "workdir": "../.."
+}

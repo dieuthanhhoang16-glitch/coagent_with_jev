@@ -1,0 +1,64 @@
+{
+  "partitions": [
+    {
+      "name": "6.1 Sol",
+      "model": "claude-opus",
+      "specialties": "复杂开发 代码审查 code review 重构 refactor 调试 debugging 架构设计 深分析 bug 可读性 逻辑错误 改进意见 审阅 找问题 风险点",
+      "priceInPer1M": 15,
+      "priceOutPer1M": 75,
+      "executor": {
+        "command": ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "opus", "--permission-mode", "acceptEdits", "--allowedTools", "Read", "Bash(npm test *)"],
+        "resultMode": "claude-json",
+        "timeoutMs": 600000
+      }
+    },
+    {
+      "name": "3.2 弧光",
+      "model": "claude-haiku",
+      "specialties": "简单只读 文档统计 文件计数 数量 总行数 总字节数 个数 wc find ls 资料清点 汇总数字 查询统计",
+      "priceInPer1M": 1,
+      "priceOutPer1M": 5,
+      "executor": {
+        "command": ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "haiku", "--allowedTools", "Read", "Bash(find *)", "Bash(wc *)", "Bash(ls *)"],
+        "resultMode": "claude-json",
+        "timeoutMs": 300000
+      }
+    },
+    {
+      "name": "4.0 织造",
+      "model": "claude-sonnet",
+      "specialties": "前端 页面 HTML CSS 落地页 landing page UI 规划 生成网页 原型 prototype",
+      "priceInPer1M": 3,
+      "priceOutPer1M": 15,
+      "executor": {
+        "command": ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "sonnet", "--permission-mode", "acceptEdits", "--allowedTools", "Read", "Write", "Bash(mkdir *)"],
+        "resultMode": "claude-json",
+        "timeoutMs": 600000
+      }
+    },
+    {
+      "name": "2.1 墨笔",
+      "model": "codex-default",
+      "specialties": "中文写作 润色 文案 翻译 摘要 改写 polish rewrite summary 长文",
+      "priceInPer1M": 1.5,
+      "priceOutPer1M": 12,
+      "executor": {
+        "command": ["codex", "exec", "--skip-git-repo-check", "-s", "workspace-write", "--json", "-o", "{resultFile}", "{prompt}"],
+        "resultMode": "codex-jsonl",
+        "timeoutMs": 600000
+      }
+    },
+    {
+      "name": "5.3 浪网",
+      "model": "claude-haiku-web",
+      "specialties": "联网搜索 web search 查资料 最新资讯 实时信息 链接核验",
+      "priceInPer1M": 1,
+      "priceOutPer1M": 5,
+      "executor": {
+        "command": ["claude", "-p", "{prompt}", "--output-format", "json", "--model", "haiku", "--allowedTools", "Read", "WebSearch", "WebFetch"],
+        "resultMode": "claude-json",
+        "timeoutMs": 300000
+      }
+    }
+  ]
+}

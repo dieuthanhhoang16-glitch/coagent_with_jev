@@ -1,0 +1,16 @@
+{
+  "title": "审查四态路由实现",
+  "description": "对 src/router/states.ts 做一次代码审查：检查四态判定逻辑有无边界 bug（confidence 恰在线上、并列分布、空分布），以及 decide() 与 nextBest() 的可读性。",
+  "scope": [
+    "阅读 src/router/states.ts 与 src/jev/confidence.ts",
+    "找出至少 2 处潜在问题或可改进点",
+    "为每处问题给出：位置、为什么是问题、怎么改"
+  ],
+  "acceptance": [
+    "结果文件列出至少 2 处具体意见（含文件名与函数名）",
+    "给出一句总体评价（可发布 / 需修改）",
+    "执行证据小节包含实际读过的文件或运行过的命令"
+  ],
+  "constraints": ["只读：不得修改任何文件"],
+  "workdir": "../.."
+}
