@@ -176,10 +176,14 @@ export interface OfficeConfig {
   partitionsFile: string;
   dbPath: string;
   runsDir: string;
-  /** 工程经理实例名（M1 单实例） */
+  /** 工程经理实例名（兼容 M1 单实例；派发默认用第一个经理） */
   managerName: string;
-  /** 拿不准时策略：escalate=升级为"需要你"停下；proceed=选最高概率继续 */
-  onUncertain: "escalate" | "proceed";
+  /** 工程经理花名册（M3 多实例并发派发；缺省=[managerName]） */
+  managers?: string[];
+  /** 顾问名（M3 consult 策略在"拿不准"时咨询的对象） */
+  advisorName?: string;
+  /** 拿不准时策略：escalate=升级为"需要你"停下；proceed=选最高概率继续；consult=问顾问，顾问点头才继续 */
+  onUncertain: "escalate" | "proceed" | "consult";
   /** 结果文件验收失败后的最大改派次数 */
   maxRedispatches: number;
 }

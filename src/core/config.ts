@@ -25,6 +25,8 @@ export const DEFAULTS: OfficeConfig = {
   dbPath: ".jev-office/jev-office.db",
   runsDir: ".jev-office/runs",
   managerName: "azir",
+  managers: ["azir", "lyra"],
+  advisorName: "sage",
   onUncertain: "escalate",
   maxRedispatches: 1,
 };

@@ -42,6 +42,7 @@ export type ManagerEvent =
   | { type: "executed"; result: ExecutionResult }
   | { type: "evidence"; items: ExecutionResult["evidence"] }
   | { type: "noul"; purpose: string; answer: NoulAnswer }
+  | { type: "advisor"; advisor: string; question: string; answer: NoulAnswer }
   | { type: "redispatch"; fromPartition: string; toPartition: string; reason: string }
   | { type: "score"; score: number; legend: string[] };
 
@@ -74,11 +75,13 @@ export async function runDispatch(
   deps: DispatchDeps,
   opts: {
     briefFile: string;
-    onUncertain?: "escalate" | "proceed";
+    onUncertain?: "escalate" | "proceed" | "consult";
     withScore?: boolean;
     redispatchOf?: number | null;
     parentDistribution?: Record<string, number> | null; // 改派时复用上轮分布
     excludePartitions?: ReadonlySet<string>;
+    /** M3 多经理：本次派发挂在哪个经理名下（缺省 config.managerName） */
+    managerName?: string;
   },
 ): Promise<DispatchOutcome> {
   const { config, partitions, ledger, client, emit } = deps;
@@ -92,7 +95,7 @@ export async function runDispatch(
   const dispatchId = ledger.startDispatch({
     briefTitle: brief.title,
     briefFile: briefPath,
-    manager: config.managerName,
+    manager: opts.managerName ?? config.managerName,
     state: "dispatched",
     partition: null,
     redispatchOf: opts.redispatchOf ?? null,
@@ -179,6 +182,53 @@ export async function runDispatch(
     };
   }
   const policy = opts.onUncertain ?? config.onUncertain;
+  // ---------- M3 顾问：拿不准时先问顾问，顾问点头才继续 ----------
+  if (decision.state === "unsure" && policy === "consult") {
+    const advisor = config.advisorName ?? "sage";
+    const aq =
+      `顾问 ${advisor} 的意见：JEV 对分区选择把握不高（把握度 ${confidence.toFixed(2)}，` +
+      `当前最优 ${decision.picked}）。按当前最优分区执行，可行吗？`;
+    const { answer, meta } = await client.noul(state, {
+      instructions: aq,
+      criteria: { true: "把握不高但仍值得执行，最坏代价可控", false: "把握太低不应冒险，应升级给老板" },
+    });
+    tally(meta);
+    emit({ type: "advisor", advisor, question: aq, answer });
+    ledger.insertJudgment({
+      dispatchId,
+      primitive: "noul",
+      backend: client.backend,
+      question: aq,
+      state,
+      candidates: JSON.stringify(["true", "false"]),
+      distribution: JSON.stringify({ true: answer.p, false: 1 - answer.p }),
+      confidence: answer.confidence,
+      threshold: 0.5,
+      action: answer.p >= 0.5 ? "yes" : "no",
+      latencyMs: meta.latencyMs,
+      inputTokens: meta.inputTokens,
+      outputTokens: meta.outputTokens,
+    });
+    emit({ type: "noul", purpose: "顾问咨询", answer });
+    if (answer.p < 0.5) {
+      finishAs("need-you");
+      return {
+        state: "need-you",
+        dispatchId,
+        brief,
+        decision: { ...decision, state: "need-you", reason: `顾问 ${advisor} 否决（P(执行)=${answer.p.toFixed(2)} < 0.50），升级为"需要你"` },
+        distribution,
+        confidence,
+        partition: null,
+        result: null,
+        noulPassed: null,
+        scoreValue: null,
+        cost: null,
+        redispatchIds: [],
+      };
+    }
+    // 顾问放行：继续往下走（decision.picked 已是最优分区）
+  }
   if (decision.state === "unsure" && policy === "escalate") {
     finishAs("need-you");
     return {

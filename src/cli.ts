@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /**
- * jev — JEV 办公室命令行（M1）
+ * jev — JEV 办公室命令行（M2）
  *
  *   jev init                                初始化配置/分区/演示参考目录
  *   jev partitions list                     列出全部型号分区
  *   jev dispatch --brief FILE [选项]         走完整一轮：任务书→choice→派发→noul 验收
  *   jev ledger                              成本账目（今日 + 累计）
  *   jev history [-n N]                      最近的判断与派发记录（审计）
+ *   jev office [--once]                     全屏面板（M2）：工位/判断/账本/流水/日志
  *   jev demo                                连跑三个异构演示任务（伪 JEV，无需 Key）
  */
 import { parseArgs } from "node:util";
@@ -22,6 +23,10 @@ import { runDispatch, type ManagerEvent } from "./manager/engineering-manager.ts
 import { c } from "./ui/ansi.ts";
 import { renderJudgmentPanel, renderEvidence, renderStatusBar } from "./ui/bars.ts";
 import { DECISION_STATE_LABEL, type Partition } from "./core/types.ts";
+import { mkInitialState, reduce, type OfficeSummary, type RunCard } from "./tui/state.ts";
+import { renderFrame } from "./tui/frame.ts";
+import { readSummary, runTui } from "./tui/app.ts";
+import { openCast } from "./tui/cast.ts";
 
 const EXIT_BY_STATE: Record<string, number> = {
   done: 0,
@@ -117,6 +122,13 @@ function makeEmitter(partitions: Partition[], config: ReturnType<typeof loadConf
         const p = `${(e.answer.p * 100).toFixed(1)}%`;
         const mark = e.answer.verdict ? c.green("是") : c.red("否");
         console.log(`  ${c.bold("noul")} [${e.purpose}] P(是)=${p} → ${mark}（把握 ${e.answer.confidence.toFixed(2)}）`);
+        break;
+      }
+      case "advisor": {
+        const p = `${(e.answer.p * 100).toFixed(1)}%`;
+        console.log(
+          `  ${c.magenta("顾问")} [${e.advisor}] P(执行)=${p} → ${e.answer.p >= 0.5 ? c.green("放行") : c.red("否决")}`,
+        );
         break;
       }
       case "redispatch":
@@ -285,7 +297,12 @@ async function cmdDispatch(rest: string[]): Promise<number> {
     },
     {
       briefFile: brief,
-      onUncertain: v["on-uncertain"] === "proceed" ? "proceed" : "escalate",
+      onUncertain:
+        v["on-uncertain"] === "proceed"
+          ? "proceed"
+          : v["on-uncertain"] === "consult"
+            ? "consult"
+            : "escalate",
       withScore: Boolean(v["with-score"]),
     },
   );
@@ -352,18 +369,152 @@ async function cmdDemo(rest: string[]): Promise<number> {
   return worst;
 }
 
+/**
+ * 用账本里的最近一次 choice 判断 + 最近派发记录预填面板，
+ * 让 jev office 一进来就不是空办公室（--once 快照同样受益）。
+ */
+function hydrateFromLedger(
+  state: ReturnType<typeof mkInitialState>,
+  ledger: Ledger,
+  partitions: Partition[],
+): void {
+  reduce(state, { type: "summary", summary: readSummary(ledger) });
+  const specs = Object.fromEntries(
+    partitions.map((p) => [p.name, { specialty: p.specialties }]),
+  );
+  const lastChoice = ledger
+    .recentJudgments(20)
+    .find((r) => r.primitive === "choice");
+  if (lastChoice) {
+    let distribution: Record<string, number> = {};
+    try {
+      distribution = JSON.parse(lastChoice.distribution) as Record<string, number>;
+    } catch {
+      distribution = {};
+    }
+    const action = String(lastChoice.action);
+    const label = DECISION_STATE_LABEL[action as keyof typeof DECISION_STATE_LABEL] ?? action;
+    const top = Object.entries(distribution).sort((a, b) => b[1] - a[1])[0];
+    state.choicePanel = {
+      question: lastChoice.question,
+      distribution,
+      specs,
+      confidence: lastChoice.confidence,
+      threshold: lastChoice.threshold,
+      decisionLabel:
+        action === "execute" && top
+          ? `✅ → 派给 ${top[0]} · ${label}`
+          : `◐ ${label}（历史 #${lastChoice.id}）`,
+      decisionState: action,
+      latencyMs: lastChoice.latencyMs,
+      backend: `${lastChoice.backend}·历史`,
+    };
+  }
+  const recent = ledger.recentDispatches(4);
+  const cards: RunCard[] = recent.map((d) => ({
+    seq: d.id,
+    lane: 0,
+    manager: d.manager,
+    briefFile: d.briefFile,
+    partition: d.partition,
+    displayCmd: d.executorCmd,
+    startedAtMs: Date.parse(d.startedTs.replace(" ", "T") + "Z") || Date.now(),
+    exitCode: null,
+    tokenText: null,
+    evidence: [],
+    noulLine: null,
+    finalText:
+      `${d.state === "done" ? "✔" : d.state === "failed" ? "✖" : "◐"} ${d.state}` +
+      (d.partition ? ` ${d.partition}` : "") +
+      (d.noulPassed === 1 ? " ✓验收" : d.noulPassed === 0 ? " ✗验收" : "") +
+      ` ${d.briefTitle.slice(0, 18)}`,
+  }));
+  if (cards.length > 0) state.runs = cards;
+}
+
+async function cmdOffice(rest: string[]): Promise<number> {
+  const v = parseRest(rest, {
+    config: { type: "string" },
+    backend: { type: "string" },
+    once: { type: "boolean", default: false },
+    yes: { type: "boolean", default: false },
+    cols: { type: "string" },
+    rows: { type: "string" },
+    record: { type: "string" },
+    speed: { type: "string" },
+  });
+  const office = await openOffice({
+    config: typeof v["config"] === "string" ? v["config"] : undefined,
+    backend: typeof v["backend"] === "string" ? v["backend"] : undefined,
+  });
+  const baselineName = mostExpensive(office.partitions).name;
+  const managerNames =
+    office.config.managers && office.config.managers.length > 0
+      ? office.config.managers
+      : [office.config.managerName];
+  const state = mkInitialState({
+    managerName: office.config.managerName,
+    backendLabel: office.client.label,
+    threshold: office.config.jev.confidenceThreshold,
+    partitions: office.partitions,
+    baselineName,
+    managers: managerNames,
+    advisorName: office.config.advisorName ?? "sage",
+  });
+  hydrateFromLedger(state, office.ledger, office.partitions);
+
+  // --once（或非 TTY）：渲染一帧到 stdout 就退出 —— CI/管道里也能看面板
+  if (v["once"] || !process.stdout.isTTY) {
+    const cols = Math.max(40, Number(v["cols"]) || 100);
+    const rows = Math.max(12, Number(v["rows"]) || 30);
+    for (const line of renderFrame(state, cols, rows, Date.now())) {
+      console.log(line);
+    }
+    if (!v["once"] && !process.stdout.isTTY) {
+      console.log("\n（非 TTY 环境以上为 --once 静态快照；在真终端里跑 jev office 进入全屏）");
+    }
+    office.ledger.close();
+    return 0;
+  }
+
+  // M3 录屏：--record FILE 把整段会话写成 asciinema v2 .cast（回放: asciinema play FILE）
+  const cast =
+    typeof v["record"] === "string" && v["record"].length > 0
+      ? openCast(v["record"], process.stdout.columns || 100, process.stdout.rows || 30)
+      : undefined;
+  if (cast) console.log(c.gray(`录屏中 → ${String(v["record"])}（每帧都会写盘）`));
+  const speed = Number(v["speed"]);
+  const code = await runTui({
+    config: office.config,
+    partitions: office.partitions,
+    ledger: office.ledger,
+    client: office.client,
+    baselineName,
+    state,
+    ...(cast ? { cast, ...(speed > 0 ? { castSpeed: speed } : {}) } : {}),
+    ...(v["yes"] ? { skipConfirm: true } : {}),
+  });
+  office.ledger.close();
+  return code;
+}
+
 /* ------------------------------- 主入口 ------------------------------- */
 
-const USAGE = `jev — JEV 办公室 ${c.gray("(M1)")}
+const USAGE = `jev — JEV 办公室 ${c.gray("(M3 完整办公室)")}
 
 用法:
   jev init                      初始化配置与演示目录
   jev dispatch --brief FILE     任务书 → JEV choice → 派发 → noul 验收
       [--config C] [--backend auto|http|pseudo] [--yes]
-      [--on-uncertain escalate|proceed] [--with-score]
+      [--on-uncertain escalate|proceed|consult] [--with-score]
   jev partitions list           列出现有型号分区
   jev ledger                    成本账目（今日 + 累计）
   jev history [-n N]            审计流：最近的判断与派发
+  jev office [--once]           全屏面板（M3）：角色条/工位/判断/账本/多经理流水/日志
+                                [--cols N --rows N] --once 或非 TTY 输出一帧快照
+                                [--yes] 免 [y/N] 门禁（脚本化演示/录屏用）
+                                [--record FILE] 录屏为 .cast（asciinema play FILE 回放）
+                                [--speed N] 录屏时间压缩倍率（默认 1）
   jev demo                      连跑 3 个异构演示任务（默认 pseudo，无 Key 可跑）
 
 环境变量: JEV_BASE_URL / JEV_API_KEY / JEV_MODEL / JEV_BACKEND
@@ -386,6 +537,9 @@ async function main() {
       return;
     case "history":
       await cmdHistory(rest);
+      return;
+    case "office":
+      process.exit(await cmdOffice(rest));
       return;
     case "demo":
       process.exit(await cmdDemo(rest));

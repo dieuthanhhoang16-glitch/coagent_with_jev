@@ -6,10 +6,10 @@
 老板（你）
   │  任务书（范围/验收标准/约束）
   ▼
-工程经理 azir ──→ JEV choice:「派给哪个型号分区？」──→ 概率分布 + 把握度
-  │                                                     │ 把握线(0.70)
-  │                     ┌─ 直接执行 ─┬─ 拿不准 ─┬─ 交回 ─┴─ 需要你
-  ▼                     ▼
+工程经理 azir / lyra（多条泳道并行接单）──→ JEV choice:「派给哪个型号分区？」──→ 概率分布 + 把握度
+  │                                                              │ 把握线(0.70)
+  │        顾问 sage ←—— 拿不准时问一句「可行吗？」 ——┐      ┌─ 直接执行 ─┬─ 拿不准 ─┬─ 交回 ─┴─ 需要你
+  ▼                                                   ▼      ▼
 执行器(独立 shell 子进程, claude / codex …)  →  结果文件  →  JEV noul:「满足验收标准吗？」
   │                                                        │ 否 → 改派 / 挂起
   ▼                                                        ▼
@@ -26,6 +26,9 @@ node src/cli.ts dispatch --brief examples/briefs/doc-stats.json --yes
 node src/cli.ts demo        # 连续派发 3 个异构任务（代码审查/文档统计/前端页面）
 node src/cli.ts ledger      # 今日/累计成本账目
 node src/cli.ts history     # 审计流:最近的判断与派发
+node src/cli.ts office      # 全屏办公室（d 派发 · y/n 门禁 · q 退出；azir/lyra 双经理并行）
+node src/cli.ts office --once  # 非 TTY 也能看：输出一帧静态快照
+node src/cli.ts office --record demo.cast  # 边跑边录，asciinema play demo.cast 回放
 node --no-warnings=ExperimentalWarning --test test/   # 全部测试
 ```
 
@@ -76,8 +79,12 @@ node src/cli.ts dispatch --brief examples/briefs/code-review.json --yes --backen
 ## 路线
 
 - **M1 ✅** 决策客户端 + 成本账目 + 单工程经理命令行闭环（任务书→choice→派发→noul 验收→落账）
-- **M2** OpenTUI 单屏：JEV 判断面板（复用 `src/ui/bars.ts` 纯函数内核）+ 会话记录
-- **M3** 完整办公室：角色条 + 分区工位 + 多工程经理 + 顾问 + 录屏证明
+- **M2 ✅** 全屏面板 `jev office`：三栏区（分区工位 │ 判断面板 │ 今日账本）+ 派发流水 + 滚动日志；`d` 派发、`y/n` 执行门禁、`q` 退出（running 时双击强制）；--once 输出静态快照供 CI。零依赖 ANSI 实现——渲染是纯函数（state → rows），将来若换 OpenTUI 只换 `src/tui/frame.ts` 一层
+- **M3 ✅** 完整办公室：
+  - **角色条**：`👤 你(老板) │ azir ●跑#1 │ lyra 空闲 │ 顾问 sage 空闲`，忙闲一眼看（`config.managers` / `advisorName` 可配）
+  - **多工程经理并行**：每位经理一条派发泳道，各自从队列取任务书并行跑；事件在 reducer 边界贴 `lane` 标签按道归位，工位状态带属主（`●azir`）；两条泳道同时到 `[y/N]` 门禁时自动串行化（一个问完再问下一个）
+  - **顾问**：`--on-uncertain consult`（或配置 `"onUncertain": "consult"`）下，拿不准（把握度 ∈ [拿不准线, 把握线)）先问顾问 noul「按当前最优执行可行吗？」——P(执行) ≥ 0.50 放行照原计划执行（decision 本体仍标注"拿不准"），< 0.50 升级为「需要你」，全程落审计；`escalate`/`proceed` 语义不变
+  - **录屏证明**：`jev office --record demo.cast` 把整段会话写成 asciinema v2，`asciinema play demo.cast` 即可回放；`--speed N` 压缩回放时间，`--yes` 免门禁便于脚本化演示
 
 ## 免责声明
 
